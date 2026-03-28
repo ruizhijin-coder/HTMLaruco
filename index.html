@@ -40,7 +40,6 @@
             background: #000;
         }
 
-        video,
         canvas {
             position: absolute;
             top: 0;
@@ -48,6 +47,35 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
+        }
+
+        #upload-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: var(--primary);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 62, 62, 0.4);
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: none;
+        }
+
+        #upload-btn:hover {
+            transform: translateX(-50%) translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 62, 62, 0.6);
+        }
+
+        #file-input {
+            display: none;
         }
 
         #ui-overlay {
@@ -133,9 +161,17 @@
 <body>
 
     <div id="container">
-        <div id="loading" class="loading">正在获取摄像头权限...</div>
-        <video id="video" playsinline></video>
+        <div id="loading" class="loading" style="display: none;">正在读取图片...</div>
         <canvas id="canvas"></canvas>
+        <div id="scan-line"></div>
+
+        <button id="upload-btn" onclick="document.getElementById('file-input').click()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+            上传照片识别
+        </button>
+        <input type="file" id="file-input" accept="image/*">
         <div id="scan-line"></div>
 
         <div id="ui-overlay">
@@ -154,10 +190,10 @@
     <div id="footer">Polaroid Scan Jig Detector v1.0 • Antigravity Web</div>
 
     <script>
-        const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const loading = document.getElementById('loading');
+        const fileInput = document.getElementById('file-input');
 
         const dots = {
             1: document.getElementById('dot1'),
@@ -168,74 +204,47 @@
         let detector;
 
         async function init() {
-            // 检查安全上下文 (HTTPS 或 localhost)
-            if (!window.isSecureContext && window.location.protocol !== 'http:' && window.location.hostname !== 'localhost') {
-                loading.innerHTML = "❌ <b>浏览器安全限制:</b><br>摄像头只能在 HTTPS 或 localhost 下使用。<br>建议运行: <code>python -m http.server</code> 并访问 <code>http://localhost:8000</code>";
-                return;
-            }
+            // 初始化 Aruco 检测器 (4x4 字典)
+            detector = new AR.Detector({
+                dictionaryName: 'ARUCO_4X4_50'
+            });
 
-            try {
-                let stream;
-                // 尝试优先使用后置摄像头 (移动端)，如果失败则降级
-                const constraints = {
-                    video: { 
-                        facingMode: { ideal: 'environment' }, 
-                        width: { ideal: 1280 }, 
-                        height: { ideal: 720 } 
-                    }
-                };
-
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (e) {
-                    console.warn("无法获取后置摄像头，尝试默认摄像头:", e);
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                }
-
-                video.srcObject = stream;
-                
-                // 确保视频元数据加载后再播放，避免某些移动端加载瞬间报错
-                video.onloadedmetadata = () => {
-                    video.play();
-                    requestAnimationFrame(loop);
-                    loading.style.display = 'none';
-                };
-
-                // 初始化 Aruco 检测器 (4x4 字典)
-                detector = new AR.Detector({
-                    dictionaryName: 'ARUCO_4X4_50'
-                });
-
-            } catch (err) {
-                console.error("Camera Error:", err);
-                let msg = err.message;
-                if (err.name === 'NotAllowedError') msg = "用户拒绝了摄像头权限。";
-                else if (err.name === 'NotFoundError') msg = "未找到摄像头设备。";
-                else if (err.name === 'NotReadableError') msg = "摄像头已被其他程序占用。";
-                
-                loading.innerHTML = "❌ 错误: 无法访问摄像头 (" + msg + ")<br>请检查权限设置或刷新页面。";
-            }
+            // 监听文件上传
+            fileInput.addEventListener('change', handleFileUpload);
         }
 
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        function loop() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // 自动调整画布大小以匹配视频
-                if (canvas.width !== video.videoWidth) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                }
+            loading.style.display = 'flex';
+            const reader = new FileReader();
 
-                // 绘制视频帧到隐藏画布或直接检测
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    detectFromImage(img);
+                    loading.style.display = 'none';
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
 
-                // 执行检测
-                const markers = detector.detect(imageData);
+        function detectFromImage(img) {
+            // 调整画布大小
+            canvas.width = img.width;
+            canvas.height = img.height;
 
-                drawMarkers(markers);
-            }
-            requestAnimationFrame(loop);
+            // 绘制图片
+            ctx.drawImage(img, 0, 0);
+
+            // 执行检测
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const markers = detector.detect(imageData);
+
+            // 绘制结果
+            drawMarkers(markers);
         }
 
         function drawMarkers(markers) {
@@ -249,7 +258,7 @@
 
                 // 绘制标记框
                 ctx.strokeStyle = "#00e676";
-                ctx.lineWidth = 3;
+                ctx.lineWidth = Math.max(3, canvas.width / 400); // 动态粗细
                 ctx.beginPath();
                 marker.corners.forEach((c, i) => {
                     if (i === 0) ctx.moveTo(c.x, c.y);
@@ -282,7 +291,7 @@
                 // 绘制红色扫描范围
                 ctx.strokeStyle = "#ff3e3e";
                 ctx.fillStyle = "rgba(255, 62, 62, 0.2)";
-                ctx.lineWidth = 5;
+                ctx.lineWidth = Math.max(5, canvas.width / 200);
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
@@ -294,7 +303,7 @@
 
                 // 绘制标签
                 ctx.fillStyle = "#ff3e3e";
-                ctx.font = "bold 24px Arial";
+                ctx.font = `bold ${Math.max(24, canvas.width / 40)}px Arial`;
                 ctx.fillText("Polaroid Scan Ready", p1.x, p1.y - 20);
             }
         }
