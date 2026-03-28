@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宝丽来扫描治具检测器 - Antigravity Web</title>
+    <!-- 引入 js-aruco2 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/js-aruco2@1.2.0/dist/aruco.min.js"></script>
+    <style>
+        :root {
+            --primary: #ff3e3e;
+            --secondary: #00e676;
+            --bg: #121212;
+            --panel: rgba(30, 30, 30, 0.8);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: white;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            background: #000;
+        }
+
+        video,
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: var(--panel);
+            backdrop-filter: blur(10px);
+            padding: 15px 25px;
+            border-radius: 10px;
+            border-left: 4px solid var(--primary);
+            pointer-events: none;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 12px;
+            background: #555;
+            transition: 0.3s;
+        }
+
+        .dot.active {
+            background: var(--secondary);
+            box-shadow: 0 0 10px var(--secondary);
+        }
+
+        #scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            top: 50%;
+            box-shadow: 0 0 15px var(--primary);
+            animation: moveScan 3s infinite linear;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        @keyframes moveScan {
+            0% {
+                top: 10%;
+            }
+
+            50% {
+                top: 90%;
+            }
+
+            100% {
+                top: 10%;
+            }
+        }
+
+        #footer {
+            margin-top: 20px;
+            text-align: center;
+            opacity: 0.6;
+            font-size: 12px;
+        }
+
+        .loading {
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: var(--bg);
+            z-index: 100;
+            inset: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="container">
+        <div id="loading" class="loading">正在获取摄像头权限...</div>
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="scan-line"></div>
+
+        <div id="ui-overlay">
+            <div class="status-item">
+                <div id="dot1" class="dot"></div> 左上 (ID 1)
+            </div>
+            <div class="status-item">
+                <div id="dot2" class="dot"></div> 右上 (ID 2)
+            </div>
+            <div class="status-item">
+                <div id="dot3" class="dot"></div> 右下 (ID 3)
+            </div>
+        </div>
+    </div>
+
+    <div id="footer">Polaroid Scan Jig Detector v1.0 • Antigravity Web</div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+
+        const dots = {
+            1: document.getElementById('dot1'),
+            2: document.getElementById('dot2'),
+            3: document.getElementById('dot3')
+        };
+
+        let detector;
+
+        async function init() {
+            try {
+                // 初始化摄像头
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
+                video.play();
+
+                // 初始化 Aruco 检测器 (4x4 字典)
+                // js-aruco2 的字典名称可能因版本略有不同，这里使用标准 4x4
+                detector = new AR.Detector({
+                    dictionaryName: 'ARUCO_4X4_50'
+                });
+
+                requestAnimationFrame(loop);
+                loading.style.display = 'none';
+            } catch (err) {
+                loading.innerText = "错误: 无法访问摄像头 (" + err.message + ")";
+            }
+        }
+
+        function loop() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // 自动调整画布大小以匹配视频
+                if (canvas.width !== video.videoWidth) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+
+                // 绘制视频帧到隐藏画布或直接检测
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                // 执行检测
+                const markers = detector.detect(imageData);
+
+                drawMarkers(markers);
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function drawMarkers(markers) {
+            const found = {};
+
+            // 重置状态点
+            [1, 2, 3].forEach(id => dots[id].classList.remove('active'));
+
+            markers.forEach(marker => {
+                const id = marker.id;
+
+                // 绘制标记框
+                ctx.strokeStyle = "#00e676";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                marker.corners.forEach((c, i) => {
+                    if (i === 0) ctx.moveTo(c.x, c.y);
+                    else ctx.lineTo(c.x, c.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+
+                if (id === 1 || id === 2 || id === 3) {
+                    // 计算中心点
+                    const centerX = marker.corners.reduce((s, c) => s + c.x, 0) / 4;
+                    const centerY = marker.corners.reduce((s, c) => s + c.y, 0) / 4;
+                    found[id] = { x: centerX, y: centerY };
+                    dots[id].classList.add('active');
+                }
+            });
+
+            // 绘制扫描区域逻辑 (如果 1, 2, 3 都全了)
+            if (found[1] && found[2] && found[3]) {
+                const p1 = found[1];
+                const p2 = found[2];
+                const p3 = found[3];
+
+                // 向量预测 P4: P4 = P1 + (P3 - P2)
+                const p4 = {
+                    x: p1.x + (p3.x - p2.x),
+                    y: p1.y + (p3.y - p2.y)
+                };
+
+                // 绘制红色扫描范围
+                ctx.strokeStyle = "#ff3e3e";
+                ctx.fillStyle = "rgba(255, 62, 62, 0.2)";
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(p3.x, p3.y);
+                ctx.lineTo(p4.x, p4.y);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.fill();
+
+                // 绘制标签
+                ctx.fillStyle = "#ff3e3e";
+                ctx.font = "bold 24px Arial";
+                ctx.fillText("Polaroid Scan Ready", p1.x, p1.y - 20);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

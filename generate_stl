@@ -1,0 +1,47 @@
+import cv2
+import numpy as np
+
+def write_cube(f, x, y, z, w, h, d):
+    # 8个顶点
+    v = [
+        (x, y, z), (x+w, y, z), (x+w, y+h, z), (x, y+h, z),
+        (x, y, z+d), (x+w, y, z+d), (x+w, y+h, z+d), (x, y+h, z+d)
+    ]
+    # 12个面
+    faces = [
+        (0,3,1), (1,3,2), (4,5,7), (5,6,7),
+        (0,1,4), (1,5,4), (1,2,5), (2,6,5),
+        (2,3,6), (3,7,6), (3,0,7), (0,4,7)
+    ]
+    for face in faces:
+        f.write("  facet normal 0 0 0\n    outer loop\n")
+        for i in face: f.write(f"      vertex {v[i][0]} {v[i][1]} {v[i][2]}\n")
+        f.write("    endloop\n  endfacet\n")
+
+def save_marker_solid_stl(marker_id, filename, cell_size=4.0, base_thickness=1.0, bit_thickness=1.5):
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    img_6x6 = cv2.aruco.generateImageMarker(dictionary, marker_id, 6)
+    
+    with open(filename, 'w') as f:
+        f.write(f"solid marker_{marker_id}\n")
+        
+        # 1. 生成一体化底座 (覆盖 6x6 区域)
+        total_size = 6 * cell_size
+        write_cube(f, 0, 0, 0, total_size, total_size, base_thickness)
+        
+        # 2. 在底座正上方生成码位凸起
+        for r in range(6):
+            for c in range(6):
+                if img_6x6[r, c] == 0: # 黑色色块
+                    # 注意：坐标 z 从底座厚度开始向上增长
+                    write_cube(f, c * cell_size, (5-r) * cell_size, base_thickness, 
+                               cell_size, cell_size, bit_thickness)
+                               
+        f.write(f"endsolid marker_{marker_id}\n")
+    print(f"Generated Solid STL: {filename}")
+
+if __name__ == "__main__":
+    # ID [1, 2, 3]
+    save_marker_solid_stl(1, 'marker_top_left_solid.stl')
+    save_marker_solid_stl(2, 'marker_top_right_solid.stl')
+    save_marker_solid_stl(3, 'marker_bottom_right_solid.stl')
