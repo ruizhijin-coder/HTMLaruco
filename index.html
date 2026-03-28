@@ -1,315 +1,791 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>宝丽来扫描治具检测器 - Antigravity Web</title>
-    <!-- 引入 js-aruco2 库 -->
-    <script src="https://cdn.jsdelivr.net/npm/js-aruco2@1.2.0/dist/aruco.min.js"></script>
+    <title>Polaroid Scan — 宝丽来照片提取器</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #ff3e3e;
-            --secondary: #00e676;
-            --bg: #121212;
-            --panel: rgba(30, 30, 30, 0.8);
+            --cream: #faf6f1;
+            --white: #ffffff;
+            --text: #2c2420;
+            --text-light: #8a7e76;
+            --accent: #e85d4a;
+            --accent-soft: #fff0ed;
+            --green: #34c759;
+            --green-soft: #eafbf0;
+            --shadow-sm: 0 2px 8px rgba(44,36,32,0.06);
+            --shadow-md: 0 8px 30px rgba(44,36,32,0.1);
+            --shadow-lg: 0 20px 60px rgba(44,36,32,0.12);
+            --rainbow: linear-gradient(90deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db);
+            --radius: 16px;
         }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            margin: 0;
-            padding: 0;
-            background: var(--bg);
-            color: white;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            overflow: hidden;
+            background: var(--cream);
+            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+        }
+
+        /* ===== Header ===== */
+        header {
+            padding: 20px 24px;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 760px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 48px;
+            background: var(--white);
+            border-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 6px;
+        }
+
+        .logo-icon::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 4px;
+            background: var(--rainbow);
+            border-radius: 0 0 4px 4px;
+        }
+
+        .logo-icon svg { width: 24px; height: 24px; color: var(--text); }
+
+        .logo h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .logo h1 span { color: var(--accent); }
+
+        .pills {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--white);
+            color: var(--text-light);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s;
+        }
+
+        .pill .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #d4d0cc;
+            transition: all 0.3s;
+        }
+
+        .pill.found { background: var(--green-soft); color: #1a7a34; }
+        .pill.found .dot { background: var(--green); box-shadow: 0 0 8px rgba(52,199,89,0.5); }
+
+        /* ===== Main ===== */
+        .page {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 0 24px 60px;
+        }
+
+        /* ===== Upload Card ===== */
+        .card {
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .card .rainbow-top { height: 5px; background: var(--rainbow); }
+
+        /* Drop zone (shown when no image loaded) */
+        .dropzone {
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .dropzone:hover { background: #fdf9f6; }
+        .dropzone.dragging { background: var(--accent-soft); }
+
+        .dropzone .icon-ring {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-        }
-
-        #container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            aspect-ratio: 4/3;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-            background: #000;
-        }
-
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-        #upload-btn {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-            background: var(--primary);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 30px;
-            cursor: pointer;
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(255, 62, 62, 0.4);
+            margin-bottom: 20px;
             transition: 0.3s;
+        }
+
+        .dropzone:hover .icon-ring { transform: scale(1.08); background: #ffe0da; }
+
+        .dropzone .icon-ring svg { width: 32px; height: 32px; color: var(--accent); }
+        .dropzone h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+        .dropzone p { font-size: 14px; color: var(--text-light); line-height: 1.6; }
+        .dropzone .hint { font-size: 12px; color: #c0b8b0; margin-top: 12px; }
+
+        /* Image preview (shown after upload) */
+        .preview { position: relative; display: none; }
+        .preview.show { display: block; }
+
+        .preview canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .preview .toolbar {
+            position: absolute;
+            top: 12px; right: 12px;
+            display: flex; gap: 8px;
+        }
+
+        .toolbar-btn {
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(8px);
+            border: none;
+            border-radius: 100px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 10px;
-            border: none;
+            gap: 6px;
+            box-shadow: var(--shadow-sm);
+            transition: 0.2s;
         }
 
-        #upload-btn:hover {
-            transform: translateX(-50%) translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 62, 62, 0.6);
-        }
+        .toolbar-btn:hover { background: #fff; box-shadow: var(--shadow-md); }
+        .toolbar-btn svg { width: 14px; height: 14px; }
 
-        #file-input {
+        /* Status message */
+        .status-bar {
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: center;
             display: none;
         }
 
-        #ui-overlay {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            background: var(--panel);
-            backdrop-filter: blur(10px);
-            padding: 15px 25px;
-            border-radius: 10px;
-            border-left: 4px solid var(--primary);
-            pointer-events: none;
+        .status-bar.show { display: block; }
+        .status-bar.success { background: var(--green-soft); color: #1a7a34; }
+        .status-bar.fail { background: #fff3f0; color: var(--accent); }
+
+        /* ===== Result ===== */
+        .result {
+            margin-top: 32px;
+            display: none;
         }
 
-        .status-item {
+        .result.show {
+            display: block;
+            animation: fadeUp 0.5s ease;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-top {
             display: flex;
             align-items: center;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: 500;
+            justify-content: space-between;
+            margin-bottom: 16px;
         }
 
-        .dot {
-            width: 10px;
-            height: 10px;
+        .result-top h3 {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .check-icon {
+            width: 22px; height: 22px;
             border-radius: 50%;
-            margin-right: 12px;
-            background: #555;
-            transition: 0.3s;
-        }
-
-        .dot.active {
-            background: var(--secondary);
-            box-shadow: 0 0 10px var(--secondary);
-        }
-
-        #scan-line {
-            position: absolute;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--primary), transparent);
-            top: 50%;
-            box-shadow: 0 0 15px var(--primary);
-            animation: moveScan 3s infinite linear;
-            pointer-events: none;
-            opacity: 0.5;
-        }
-
-        @keyframes moveScan {
-            0% {
-                top: 10%;
-            }
-
-            50% {
-                top: 90%;
-            }
-
-            100% {
-                top: 10%;
-            }
-        }
-
-        #footer {
-            margin-top: 20px;
-            text-align: center;
-            opacity: 0.6;
-            font-size: 12px;
-        }
-
-        .loading {
-            position: absolute;
-            display: flex;
-            justify-content: center;
+            background: var(--green);
+            display: inline-flex;
             align-items: center;
-            background: var(--bg);
-            z-index: 100;
-            inset: 0;
+            justify-content: center;
+        }
+
+        .check-icon svg { width: 14px; height: 14px; color: white; }
+
+        .dl-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: var(--text);
+            color: white;
+            border: none;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: var(--shadow-md);
+        }
+
+        .dl-btn:hover { background: #1a1410; transform: translateY(-1px); }
+        .dl-btn svg { width: 16px; height: 16px; }
+
+        .polaroid-frame {
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 20px 20px 56px;
+            position: relative;
+            transform: rotate(-1deg);
+            transition: transform 0.3s;
+        }
+
+        .polaroid-frame:hover { transform: rotate(0deg); }
+
+        .polaroid-frame::after {
+            content: 'Polaroid Scan';
+            position: absolute;
+            bottom: 16px; left: 0; right: 0;
+            text-align: center;
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: 16px;
+            color: var(--text-light);
+        }
+
+        .polaroid-frame canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        /* ===== Footer ===== */
+        footer {
+            text-align: center;
+            padding: 24px;
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        footer .bar { width: 60px; height: 3px; background: var(--rainbow); border-radius: 2px; margin: 0 auto 12px; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 640px) {
+            header { flex-direction: column; gap: 14px; }
+            .pills { justify-content: center; }
+            .dropzone { padding: 40px 20px; }
+            .polaroid-frame { padding: 12px 12px 44px; }
+            .result-top { flex-direction: column; gap: 12px; }
         }
     </style>
 </head>
-
 <body>
 
-    <div id="container">
-        <div id="loading" class="loading" style="display: none;">正在读取图片...</div>
-        <canvas id="canvas"></canvas>
-        <div id="scan-line"></div>
-
-        <button id="upload-btn" onclick="document.getElementById('file-input').click()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+<header>
+    <div class="logo">
+        <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="12" cy="12" r="4"/>
+                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
             </svg>
-            上传照片识别
-        </button>
-        <input type="file" id="file-input" accept="image/*">
-        <div id="scan-line"></div>
+        </div>
+        <h1>Polaroid <span>Scan</span></h1>
+    </div>
+    <div class="pills">
+        <div class="pill" id="pill-1"><span class="dot"></span>左上 #1</div>
+        <div class="pill" id="pill-2"><span class="dot"></span>右上 #2</div>
+        <div class="pill" id="pill-3"><span class="dot"></span>右下 #3</div>
+    </div>
+</header>
 
-        <div id="ui-overlay">
-            <div class="status-item">
-                <div id="dot1" class="dot"></div> 左上 (ID 1)
+<div class="page">
+
+    <!-- Upload card -->
+    <div class="card">
+        <div class="rainbow-top"></div>
+
+        <div class="dropzone" id="dropzone">
+            <div class="icon-ring">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
             </div>
-            <div class="status-item">
-                <div id="dot2" class="dot"></div> 右上 (ID 2)
+            <h2>上传治具照片</h2>
+            <p>拍摄包含 ArUco 标记的宝丽来治具照片<br>自动识别并提取照片区域</p>
+            <div class="hint">支持 JPG / PNG / HEIC &middot; 点击或拖放</div>
+        </div>
+
+        <div class="preview" id="preview">
+            <canvas id="mainCanvas"></canvas>
+            <div class="toolbar">
+                <button class="toolbar-btn" id="btnReupload">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                    换一张
+                </button>
             </div>
-            <div class="status-item">
-                <div id="dot3" class="dot"></div> 右下 (ID 3)
-            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar"></div>
+    </div>
+
+    <!-- Result -->
+    <div class="result" id="resultArea">
+        <div class="result-top">
+            <h3>
+                <span class="check-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </span>
+                照片已提取
+            </h3>
+            <button class="dl-btn" id="btnDownload">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载 PNG
+            </button>
+        </div>
+        <div class="polaroid-frame">
+            <canvas id="cropCanvas"></canvas>
         </div>
     </div>
 
-    <div id="footer">Polaroid Scan Jig Detector v1.0 • Antigravity Web</div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const loading = document.getElementById('loading');
-        const fileInput = document.getElementById('file-input');
+<footer>
+    <div class="bar"></div>
+    Polaroid Scan v2.0 — Antigravity Web
+</footer>
 
-        const dots = {
-            1: document.getElementById('dot1'),
-            2: document.getElementById('dot2'),
-            3: document.getElementById('dot3')
-        };
+<!-- Hidden file input -->
+<input type="file" id="fileInput" accept="image/*" style="display:none">
 
-        let detector;
+<!-- ArUco library (3 files from GitHub, order matters) -->
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
 
-        async function init() {
-            // 初始化 Aruco 检测器 (4x4 字典)
-            detector = new AR.Detector({
-                dictionaryName: 'ARUCO_4X4_50'
-            });
+<script>
+(function() {
+    'use strict';
 
-            // 监听文件上传
-            fileInput.addEventListener('change', handleFileUpload);
+    // ========== DOM ==========
+    var fileInput    = document.getElementById('fileInput');
+    var dropzone     = document.getElementById('dropzone');
+    var previewEl    = document.getElementById('preview');
+    var mainCanvas   = document.getElementById('mainCanvas');
+    var mainCtx      = mainCanvas.getContext('2d');
+    var statusBar    = document.getElementById('statusBar');
+    var resultArea   = document.getElementById('resultArea');
+    var cropCanvas   = document.getElementById('cropCanvas');
+    var cropCtx      = cropCanvas.getContext('2d');
+    var btnReupload  = document.getElementById('btnReupload');
+    var btnDownload  = document.getElementById('btnDownload');
+    var pillEls      = { 1: document.getElementById('pill-1'), 2: document.getElementById('pill-2'), 3: document.getElementById('pill-3') };
+
+    // ========== State ==========
+    var detector = null;
+    var rawImageData = null; // original pixel data for cropping
+
+    // ========== Init ==========
+    try {
+        detector = new AR.Detector({ dictionaryName: 'ARUCO_4X4_50' });
+        console.log('[init] ArUco detector ready');
+    } catch (err) {
+        console.error('[init] Failed to create ArUco detector:', err);
+        showStatus('ArUco 库加载失败，请检查网络', 'fail');
+    }
+
+    // ========== Events ==========
+
+    // Click dropzone -> open file picker
+    dropzone.addEventListener('click', function() {
+        fileInput.value = '';  // reset so same file triggers change
+        fileInput.click();
+    });
+
+    // Re-upload button
+    btnReupload.addEventListener('click', function(e) {
+        e.stopPropagation();
+        fileInput.value = '';
+        fileInput.click();
+    });
+
+    // File selected
+    fileInput.addEventListener('change', function() {
+        var file = fileInput.files[0];
+        if (file) loadFile(file);
+    });
+
+    // Drag and drop
+    dropzone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropzone.classList.add('dragging');
+    });
+    dropzone.addEventListener('dragleave', function() {
+        dropzone.classList.remove('dragging');
+    });
+    dropzone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropzone.classList.remove('dragging');
+        var file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            loadFile(file);
         }
+    });
 
-        function handleFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+    // Download
+    btnDownload.addEventListener('click', function() {
+        cropCanvas.toBlob(function(blob) {
+            if (!blob) return;
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'polaroid_scan_' + Date.now() + '.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 'image/png');
+    });
 
-            loading.style.display = 'flex';
-            const reader = new FileReader();
+    // ========== Core Logic ==========
 
-            reader.onload = function(event) {
-                const img = new Image();
-                img.onload = function() {
-                    detectFromImage(img);
-                    loading.style.display = 'none';
-                };
-                img.src = event.target.result;
+    function loadFile(file) {
+        console.log('[load] File:', file.name, file.type, file.size);
+        hideStatus();
+        hideResult();
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var img = new Image();
+            img.onload = function() {
+                console.log('[load] Image decoded:', img.width, 'x', img.height);
+                processImage(img);
             };
-            reader.readAsDataURL(file);
+            img.onerror = function() {
+                console.error('[load] Image decode failed');
+                showStatus('图片加载失败，请换一张试试', 'fail');
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = function() {
+            console.error('[load] FileReader error');
+            showStatus('文件读取失败', 'fail');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function processImage(img) {
+        // Size canvas to image
+        mainCanvas.width = img.width;
+        mainCanvas.height = img.height;
+        mainCtx.drawImage(img, 0, 0);
+
+        // Show preview, hide dropzone
+        dropzone.style.display = 'none';
+        previewEl.classList.add('show');
+
+        // Save original pixels
+        rawImageData = mainCtx.getImageData(0, 0, img.width, img.height);
+
+        // Detect markers
+        var imageData = mainCtx.getImageData(0, 0, img.width, img.height);
+
+        if (!detector) {
+            showStatus('ArUco 检测器未初始化', 'fail');
+            return;
         }
 
-        function detectFromImage(img) {
-            // 调整画布大小
-            canvas.width = img.width;
-            canvas.height = img.height;
-
-            // 绘制图片
-            ctx.drawImage(img, 0, 0);
-
-            // 执行检测
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const markers = detector.detect(imageData);
-
-            // 绘制结果
-            drawMarkers(markers);
+        var markers = [];
+        try {
+            markers = detector.detect(imageData);
+        } catch (err) {
+            console.error('[detect] Error:', err);
+            showStatus('检测出错: ' + err.message, 'fail');
+            return;
         }
 
-        function drawMarkers(markers) {
-            const found = {};
+        console.log('[detect] Found', markers.length, 'markers:', markers.map(function(m) { return m.id; }));
 
-            // 重置状态点
-            [1, 2, 3].forEach(id => dots[id].classList.remove('active'));
+        // Process results
+        handleDetection(markers);
+    }
 
-            markers.forEach(marker => {
-                const id = marker.id;
+    function handleDetection(markers) {
+        // Reset pills
+        [1, 2, 3].forEach(function(id) { pillEls[id].classList.remove('found'); });
 
-                // 绘制标记框
-                ctx.strokeStyle = "#00e676";
-                ctx.lineWidth = Math.max(3, canvas.width / 400); // 动态粗细
-                ctx.beginPath();
-                marker.corners.forEach((c, i) => {
-                    if (i === 0) ctx.moveTo(c.x, c.y);
-                    else ctx.lineTo(c.x, c.y);
-                });
-                ctx.closePath();
-                ctx.stroke();
+        var found = {};
+        var lw = Math.max(3, mainCanvas.width / 350);
 
-                if (id === 1 || id === 2 || id === 3) {
-                    // 计算中心点
-                    const centerX = marker.corners.reduce((s, c) => s + c.x, 0) / 4;
-                    const centerY = marker.corners.reduce((s, c) => s + c.y, 0) / 4;
-                    found[id] = { x: centerX, y: centerY };
-                    dots[id].classList.add('active');
+        markers.forEach(function(marker) {
+            var id = marker.id;
+
+            // Draw green outline on every detected marker
+            mainCtx.save();
+            mainCtx.strokeStyle = '#34c759';
+            mainCtx.lineWidth = lw;
+            mainCtx.beginPath();
+            mainCtx.moveTo(marker.corners[0].x, marker.corners[0].y);
+            mainCtx.lineTo(marker.corners[1].x, marker.corners[1].y);
+            mainCtx.lineTo(marker.corners[2].x, marker.corners[2].y);
+            mainCtx.lineTo(marker.corners[3].x, marker.corners[3].y);
+            mainCtx.closePath();
+            mainCtx.stroke();
+            mainCtx.restore();
+
+            if (id >= 1 && id <= 3) {
+                var cx = (marker.corners[0].x + marker.corners[1].x + marker.corners[2].x + marker.corners[3].x) / 4;
+                var cy = (marker.corners[0].y + marker.corners[1].y + marker.corners[2].y + marker.corners[3].y) / 4;
+                found[id] = { x: cx, y: cy };
+                pillEls[id].classList.add('found');
+
+                // Draw dot + label
+                mainCtx.save();
+                var r = Math.max(6, mainCanvas.width / 200);
+                mainCtx.fillStyle = '#34c759';
+                mainCtx.beginPath();
+                mainCtx.arc(cx, cy, r, 0, Math.PI * 2);
+                mainCtx.fill();
+                var fs = Math.max(16, mainCanvas.width / 50);
+                mainCtx.fillStyle = 'rgba(255,255,255,0.95)';
+                mainCtx.font = '600 ' + fs + 'px Inter, sans-serif';
+                mainCtx.fillText('#' + id, cx + r + 4, cy + fs * 0.3);
+                mainCtx.restore();
+            }
+        });
+
+        // Check if all 3 found
+        if (found[1] && found[2] && found[3]) {
+            var p1 = found[1]; // top-left
+            var p2 = found[2]; // top-right
+            var p3 = found[3]; // bottom-right
+            var p4 = { x: p1.x + (p3.x - p2.x), y: p1.y + (p3.y - p2.y) }; // bottom-left
+
+            // Draw dashed scan area
+            mainCtx.save();
+            mainCtx.strokeStyle = 'rgba(232,93,74,0.8)';
+            mainCtx.fillStyle = 'rgba(232,93,74,0.08)';
+            mainCtx.lineWidth = Math.max(3, mainCanvas.width / 250);
+            mainCtx.setLineDash([Math.max(8, mainCanvas.width / 100), Math.max(6, mainCanvas.width / 140)]);
+            mainCtx.beginPath();
+            mainCtx.moveTo(p1.x, p1.y);
+            mainCtx.lineTo(p2.x, p2.y);
+            mainCtx.lineTo(p3.x, p3.y);
+            mainCtx.lineTo(p4.x, p4.y);
+            mainCtx.closePath();
+            mainCtx.stroke();
+            mainCtx.fill();
+            mainCtx.restore();
+
+            showStatus('3 个标记全部识别成功，照片已提取', 'success');
+
+            // Perspective crop
+            doCrop(p1, p2, p3, p4);
+        } else {
+            var n = Object.keys(found).length;
+            var missing = [1,2,3].filter(function(id) { return !found[id]; });
+            showStatus('已识别 ' + n + '/3 个标记，缺少 #' + missing.join(', #'), 'fail');
+        }
+    }
+
+    // ========== Perspective Transform ==========
+
+    function doCrop(p1, p2, p3, p4) {
+        var topLen  = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+        var leftLen = Math.sqrt(Math.pow(p4.x - p1.x, 2) + Math.pow(p4.y - p1.y, 2));
+        var outW = Math.round(topLen);
+        var outH = Math.round(leftLen);
+
+        if (outW < 10 || outH < 10) {
+            console.warn('[crop] Output too small:', outW, outH);
+            return;
+        }
+
+        console.log('[crop] Output size:', outW, 'x', outH);
+
+        cropCanvas.width = outW;
+        cropCanvas.height = outH;
+
+        // Source corners: TL, TR, BR, BL
+        var srcPts = [p1, p2, p3, p4];
+        // Destination rectangle
+        var dstPts = [
+            { x: 0, y: 0 },
+            { x: outW - 1, y: 0 },
+            { x: outW - 1, y: outH - 1 },
+            { x: 0, y: outH - 1 }
+        ];
+
+        // Compute inverse homography: dst -> src
+        var H = solveHomography(dstPts, srcPts);
+        if (!H) {
+            console.error('[crop] Homography failed');
+            return;
+        }
+
+        var srcW = rawImageData.width;
+        var srcH = rawImageData.height;
+        var srcBuf = rawImageData.data;
+        var outImg = cropCtx.createImageData(outW, outH);
+        var outBuf = outImg.data;
+
+        for (var y = 0; y < outH; y++) {
+            for (var x = 0; x < outW; x++) {
+                // Map destination pixel to source
+                var denom = H[6] * x + H[7] * y + H[8];
+                var sx = (H[0] * x + H[1] * y + H[2]) / denom;
+                var sy = (H[3] * x + H[4] * y + H[5]) / denom;
+
+                // Bilinear interpolation
+                var ix = Math.floor(sx);
+                var iy = Math.floor(sy);
+                var fx = sx - ix;
+                var fy = sy - iy;
+
+                var oi = (y * outW + x) * 4;
+
+                if (ix < 0 || iy < 0 || ix + 1 >= srcW || iy + 1 >= srcH) {
+                    outBuf[oi] = outBuf[oi+1] = outBuf[oi+2] = 0;
+                    outBuf[oi+3] = 255;
+                    continue;
                 }
-            });
 
-            // 绘制扫描区域逻辑 (如果 1, 2, 3 都全了)
-            if (found[1] && found[2] && found[3]) {
-                const p1 = found[1];
-                const p2 = found[2];
-                const p3 = found[3];
+                var i00 = (iy * srcW + ix) * 4;
+                var i10 = i00 + 4;
+                var i01 = i00 + srcW * 4;
+                var i11 = i01 + 4;
 
-                // 向量预测 P4: P4 = P1 + (P3 - P2)
-                const p4 = {
-                    x: p1.x + (p3.x - p2.x),
-                    y: p1.y + (p3.y - p2.y)
-                };
-
-                // 绘制红色扫描范围
-                ctx.strokeStyle = "#ff3e3e";
-                ctx.fillStyle = "rgba(255, 62, 62, 0.2)";
-                ctx.lineWidth = Math.max(5, canvas.width / 200);
-                ctx.beginPath();
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
-                ctx.lineTo(p3.x, p3.y);
-                ctx.lineTo(p4.x, p4.y);
-                ctx.closePath();
-                ctx.stroke();
-                ctx.fill();
-
-                // 绘制标签
-                ctx.fillStyle = "#ff3e3e";
-                ctx.font = `bold ${Math.max(24, canvas.width / 40)}px Arial`;
-                ctx.fillText("Polaroid Scan Ready", p1.x, p1.y - 20);
+                for (var c = 0; c < 4; c++) {
+                    outBuf[oi + c] = Math.round(
+                        srcBuf[i00+c] * (1-fx) * (1-fy) +
+                        srcBuf[i10+c] * fx     * (1-fy) +
+                        srcBuf[i01+c] * (1-fx) * fy     +
+                        srcBuf[i11+c] * fx     * fy
+                    );
+                }
             }
         }
 
-        init();
-    </script>
-</body>
+        cropCtx.putImageData(outImg, 0, 0);
+        showResult();
+    }
 
+    // Solve 3x3 homography from 4-point correspondences
+    // Maps src[i] -> dst[i]
+    function solveHomography(src, dst) {
+        // Build 8x8 system
+        var A = [];
+        for (var i = 0; i < 4; i++) {
+            var sx = src[i].x, sy = src[i].y;
+            var dx = dst[i].x, dy = dst[i].y;
+            A.push([ sx, sy, 1,  0,  0, 0, -dx*sx, -dx*sy, dx ]);
+            A.push([  0,  0, 0, sx, sy, 1, -dy*sx, -dy*sy, dy ]);
+        }
+
+        // Gaussian elimination on [A|b] where b = last column
+        var n = 8;
+        var M = [];
+        for (var i = 0; i < n; i++) {
+            M[i] = new Array(n + 1);
+            for (var j = 0; j < n; j++) M[i][j] = A[i][j];
+            M[i][n] = A[i][8];
+        }
+
+        for (var col = 0; col < n; col++) {
+            // Partial pivoting
+            var best = col;
+            for (var row = col + 1; row < n; row++) {
+                if (Math.abs(M[row][col]) > Math.abs(M[best][col])) best = row;
+            }
+            var tmp = M[col]; M[col] = M[best]; M[best] = tmp;
+
+            var piv = M[col][col];
+            if (Math.abs(piv) < 1e-12) return null;
+
+            for (var j = col; j <= n; j++) M[col][j] /= piv;
+
+            for (var row = 0; row < n; row++) {
+                if (row === col) continue;
+                var f = M[row][col];
+                for (var j = col; j <= n; j++) M[row][j] -= f * M[col][j];
+            }
+        }
+
+        // h = [h11, h12, h13, h21, h22, h23, h31, h32] and h33 = 1
+        return [ M[0][n], M[1][n], M[2][n], M[3][n], M[4][n], M[5][n], M[6][n], M[7][n], 1 ];
+    }
+
+    // ========== UI Helpers ==========
+
+    function showStatus(msg, type) {
+        statusBar.textContent = msg;
+        statusBar.className = 'status-bar show ' + type;
+    }
+
+    function hideStatus() {
+        statusBar.className = 'status-bar';
+    }
+
+    function showResult() {
+        resultArea.classList.add('show');
+        setTimeout(function() {
+            resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+
+    function hideResult() {
+        resultArea.classList.remove('show');
+    }
+
+})();
+</script>
+
+</body>
 </html>
